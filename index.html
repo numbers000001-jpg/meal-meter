@@ -279,6 +279,8 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
 <script>
 (function () {
   'use strict';
+  var APP_VERSION = '2026-10-26.2';
+  var newVer = null;
   var KEY = 'shokuji-meter.v1';
   var TYPES = ['朝', '昼', '夜', '間食'];
   var WK = ['日', '月', '火', '水', '木', '金', '土'];
@@ -853,6 +855,7 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
   function renderToday(v) {
     if (!storageOK) v.appendChild(h('div', { class: 'notice bad', role: 'alert' }, 'この環境ではデータを保存できません。入力した内容は、画面を閉じると消えます。'));
     if (needsBackup()) v.appendChild(h('div', { class: 'notice' }, 'バックアップは' + backupAgeText() + '。 ', h('button', { type: 'button', class: 'link', onClick: function () { setView('settings'); } }, '設定で全データをコピー')));
+    if (newVer) v.appendChild(h('div', { class: 'notice' }, '新しい版があります。 ', h('button', { type: 'button', class: 'link', onClick: function () { location.replace(location.pathname + '?v=' + encodeURIComponent(newVer)); } }, '更新する'), ' (記録は消えません)'));
     v.appendChild(dayNav());
     var meals = state.meals.filter(function (m) { return m.date === day; }).sort(byTime);
     var nChecks = 0;
@@ -1210,5 +1213,17 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
 
   state = load();
   render();
+
+  function checkUpdate() {
+    if (!/^https?:$/.test(location.protocol) || typeof fetch !== 'function') return;
+    try {
+      fetch(location.pathname + '?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) {
+        var m = /APP_VERSION = '([^']+)'/.exec(t || '');
+        if (m && m[1] !== APP_VERSION) { newVer = m[1]; if (view === 'today' && $('overlay').hidden) keepScrollRender(); }
+      }).catch(function () {});
+    } catch (e) {}
+  }
+  checkUpdate();
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') checkUpdate(); });
 })();
 </script>
