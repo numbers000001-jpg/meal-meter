@@ -1,4 +1,3 @@
-<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>食事メーター</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap">
@@ -24,6 +23,7 @@
   --c2: #b86e00;
   --c3: #0f8a78;
   --c4: #c23b63;
+  --c5: #8a5cc2;
   --veil: rgba(10, 14, 12, 0.45);
   --font-body: "Zen Kaku Gothic New", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
   --font-num: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
@@ -49,6 +49,7 @@
     --c2: #f0b44c;
     --c3: #4fd1bd;
     --c4: #ff8aa8;
+    --c5: #c4a1ff;
     --veil: rgba(0, 0, 0, 0.6);
     color-scheme: dark;
   }
@@ -73,6 +74,7 @@
   --c2: #f0b44c;
   --c3: #4fd1bd;
   --c4: #ff8aa8;
+  --c5: #c4a1ff;
   --veil: rgba(0, 0, 0, 0.6);
   color-scheme: dark;
 }
@@ -157,6 +159,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .dot.on .face .bg, .face.on .bg { fill: var(--dotc); stroke: var(--dotc); }
 .dot.on .face .e, .dot.on .face .fm, .face.on .e, .face.on .fm { fill: var(--accent-fg); }
 .dot.on .face .f, .face.on .f { stroke: var(--accent-fg); }
+.face .t { fill: var(--dot-off); font-family: var(--font-num); font-size: 11px; font-weight: 600; text-anchor: middle; }
+.dot.on .face .t { fill: var(--accent-fg); }
 .facebox { --dotc: hsl(var(--h, 0) var(--dot-s) var(--dot-l)); display: inline-block; flex: none; }
 .scale { --dotc: hsl(var(--h, 0) var(--dot-s) var(--dot-l)); }
 .dots { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); }
@@ -287,7 +291,8 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
     { key: 'mood', name: '全体の気分', lo: '絶不調', hi: '最高潮' },
     { key: 'sleep', name: '睡眠の質', lo: '最悪', hi: 'ぐっすり' },
     { key: 'drive', name: '行動力', lo: '動けない', hi: '絶好調' },
-    { key: 'stress', name: 'ストレス量', lo: 'ほぼ無し', hi: '限界', inv: true }
+    { key: 'stress', name: 'ストレス量', lo: 'ほぼ無し', hi: '限界', inv: true },
+    { key: 'nerve', name: '自律神経', lo: '副交感神経優位', hi: '交感神経優位', neutral: true }
   ];
 
   var state = null;
@@ -297,7 +302,7 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
   var range = 30;
   var demoOn = false;
   var demoCache = null;
-  var seriesOn = { mood: true, sleep: false, drive: false, stress: false };
+  var seriesOn = { mood: true, sleep: false, drive: false, stress: false, nerve: false };
   var foodMin = 3;
   var rvTab = 'food';
   var foodAll = false;
@@ -408,7 +413,7 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
   }
   function cleanDay(d) {
     if (!d || typeof d !== 'object') return null;
-    return { mood: int110(d.mood), sleep: int110(d.sleep), drive: int110(d.drive), stress: int110(d.stress), exercise: d.exercise === true, alcohol: d.alcohol === true, note: typeof d.note === 'string' ? d.note.slice(0, 1000) : '' };
+    return { mood: int110(d.mood), sleep: int110(d.sleep), drive: int110(d.drive), stress: int110(d.stress), nerve: int110(d.nerve), exercise: d.exercise === true, alcohol: d.alcohol === true, note: typeof d.note === 'string' ? d.note.slice(0, 1000) : '' };
   }
   function cleanFav(f) {
     if (!f || typeof f !== 'object' || typeof f.name !== 'string' || !normItem(f.name)) return null;
@@ -453,7 +458,7 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
       var ex = target.days[k], nd = inc.days[k];
       if (!ex) { target.days[k] = nd; c.days++; return; }
       var changed = false;
-      ['mood', 'sleep', 'drive', 'stress'].forEach(function (f) { if (ex[f] == null && nd[f] != null) { ex[f] = nd[f]; changed = true; } });
+      ['mood', 'sleep', 'drive', 'stress', 'nerve'].forEach(function (f) { if (ex[f] == null && nd[f] != null) { ex[f] = nd[f]; changed = true; } });
       ['exercise', 'alcohol'].forEach(function (f) { if (!ex[f] && nd[f]) { ex[f] = true; changed = true; } });
       if (!ex.note && nd.note) { ex.note = nd.note; changed = true; }
       if (changed) c.days++;
@@ -517,7 +522,7 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
           }
           d.meals.push({ id: 'dm' + date + t, date: date, time: times[t], type: t, items: items.slice(), text: items.join('、'), carbs: rnd() < 0.4 ? carbSum : null, starch: rnd() < 0.3 ? carbSum + items.length * 2 : null, exercise: mealEx, checks: checks });
         });
-        d.days[date] = { mood: clamp(7.5 - badMeals * 1.2 + (rnd() - 0.5)), sleep: sleep, drive: clamp(7 - badMeals + (rnd() - 0.5) * 2), stress: stress, exercise: ex, alcohol: al, note: '' };
+        d.days[date] = { mood: clamp(7.5 - badMeals * 1.2 + (rnd() - 0.5)), sleep: sleep, drive: clamp(7 - badMeals + (rnd() - 0.5) * 2), stress: stress, nerve: clamp(2 + stress * 0.7 + (rnd() - 0.5) * 3), exercise: ex, alcohol: al, note: '' };
       })(addDays(todayStr(), -i));
     }
     demoCache = d;
@@ -525,6 +530,12 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
   }
 
   /* ---------- faces and dot scale ---------- */
+  function numFace(n) {
+    var svg = s('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true', class: 'face' });
+    svg.appendChild(s('circle', { cx: 12, cy: 12, r: 10.5, class: 'bg' }));
+    svg.appendChild(s('text', { x: 12, y: 15.8, class: 't' }, String(n)));
+    return svg;
+  }
   function hueFor(v, inv) { if (!v) return 0; var t = (v - 1) / 9; return Math.round(inv ? 130 - 120 * t : 10 + 120 * t); }
   function faceSVG(level) {
     var c = (level - 5.5) / 4.5;
@@ -565,7 +576,7 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
     var btns = [];
     for (var i = 1; i <= 10; i++) (function (i) {
       var b = h('button', { type: 'button', class: 'dot', role: 'radio', 'aria-label': o.label + ' ' + i + ' / 10' });
-      b.appendChild(faceSVG(o.inv ? 11 - i : i));
+      b.appendChild(o.neutral ? numFace(i) : faceSVG(o.inv ? 11 - i : i));
       b.addEventListener('click', function () { val = (val === i) ? null : i; paint(); if (o.onChange) o.onChange(val); });
       btns.push(b); row.appendChild(b);
     })(i);
@@ -574,7 +585,7 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
         b.classList.toggle('on', val != null && idx + 1 <= val);
         b.setAttribute('aria-checked', String(val === idx + 1));
       });
-      wrap.style.setProperty('--h', String(hueFor(val, o.inv)));
+      wrap.style.setProperty('--h', o.neutral ? '265' : String(hueFor(val, o.inv)));
     }
     paint();
     return { el: wrap, get: function () { return val; } };
@@ -810,13 +821,13 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
     var cur = state.days[d0] || {};
     var saved = h('span', { class: 'msg', role: 'status' });
     var timer = null;
-    function ensure() { return state.days[d0] || (state.days[d0] = { mood: null, sleep: null, drive: null, stress: null, exercise: false, alcohol: false, note: '' }); }
+    function ensure() { return state.days[d0] || (state.days[d0] = { mood: null, sleep: null, drive: null, stress: null, nerve: null, exercise: false, alcohol: false, note: '' }); }
     function flash() { if (storageOK) { saved.textContent = '保存しました'; saved.className = 'msg'; } else { saved.textContent = '保存できません'; saved.className = 'msg bad'; } clearTimeout(timer); timer = setTimeout(function () { saved.textContent = ''; }, 1600); }
     var card = h('section', { class: 'card', 'aria-label': '1日のまとめ' },
       h('div', { class: 'row' }, h('h2', null, '1日のまとめ'), h('span', { class: 'grow' }), saved));
     SCALES.forEach(function (sc) {
       var out = h('span', { class: 'readout' }, cur[sc.key] ? String(cur[sc.key]) : '未入力');
-      var comp = dotScale({ value: cur[sc.key], label: sc.name, inv: sc.inv, onChange: function (v) {
+      var comp = dotScale({ value: cur[sc.key], label: sc.name, inv: sc.inv, neutral: sc.neutral, onChange: function (v) {
         ensure()[sc.key] = v; out.textContent = v ? String(v) : '未入力'; persist(); flash();
       } });
       card.appendChild(h('div', { class: 'field' },
@@ -970,13 +981,14 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
   }
 
   function condCard(data, sm) {
-    var c = chartCard('睡眠・ストレス・運動・飲酒との比較', '条件の違う日(食事)で、食後の気分(平均)を比べます。3食以上ある場合だけ表示します。');
+    var c = chartCard('睡眠・ストレス・自律神経・運動・飲酒との比較', '条件の違う日(食事)で、食後の気分(平均)を比べます。3食以上ある場合だけ表示します。');
     function dd(x) { return data.days[x.m.date] || null; }
     var groups = [
       ['睡眠', [['良い日(7以上)', function (x) { var d = dd(x); return d && d.sleep != null && d.sleep >= 7; }], ['悪い日(6以下)', function (x) { var d = dd(x); return d && d.sleep != null && d.sleep <= 6; }]]],
       ['ストレス', [['弱い日(5以下)', function (x) { var d = dd(x); return d && d.stress != null && d.stress <= 5; }], ['強い日(6以上)', function (x) { var d = dd(x); return d && d.stress != null && d.stress >= 6; }]]],
       ['運動', [['運動した日', function (x) { var d = dd(x); return d && d.exercise; }], ['運動しなかった日', function (x) { var d = dd(x); return d && !d.exercise; }]]],
       ['飲酒', [['飲酒した日', function (x) { var d = dd(x); return d && d.alcohol; }], ['飲酒しなかった日', function (x) { var d = dd(x); return d && !d.alcohol; }]]],
+      ['自律神経', [['交感神経が優位な日(7以上)', function (x) { var d = dd(x); return d && d.nerve != null && d.nerve >= 7; }], ['副交感神経が優位な日(4以下)', function (x) { var d = dd(x); return d && d.nerve != null && d.nerve <= 4; }]]],
       ['食後の運動', [['食後に運動した食事', function (x) { return x.m.exercise; }], ['食後に運動していない食事', function (x) { return !x.m.exercise; }]]]
     ];
     groups.forEach(function (g) {
@@ -1013,13 +1025,13 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
   }
 
   function trendCard(data) {
-    var c2 = chartCard('1日のまとめの推移', '日ごとの全体の気分・睡眠・行動力・ストレス(ストレスは高いほど強い)。');
+    var c2 = chartCard('1日のまとめの推移', '日ごとの全体の気分・睡眠・行動力・ストレス・自律神経(ストレスは高いほど強く、自律神経は高いほど交感神経が優位)。');
     var dates = [];
     for (var i = range - 1; i >= 0; i--) dates.push(addDays(todayStr(), -i));
     var anyDay = dates.some(function (dt) { return data.days[dt] && SCALES.some(function (sc) { return data.days[dt][sc.key]; }); });
     if (!anyDay) { c2.appendChild(h('p', { class: 'empty' }, 'この期間に、1日のまとめの記録がありません。')); return c2; }
     var xs = dates.map(function (dt, idx) { return (idx === 0 || idx === dates.length - 1 || idx === Math.floor(dates.length / 2)) ? fmtShort(dt) : ''; });
-    var colors = { mood: 'var(--c1)', sleep: 'var(--c3)', drive: 'var(--c2)', stress: 'var(--c4)' };
+    var colors = { mood: 'var(--c1)', sleep: 'var(--c3)', drive: 'var(--c2)', stress: 'var(--c4)', nerve: 'var(--c5)' };
     var shown = SCALES.filter(function (sc) { return seriesOn[sc.key]; });
     c2.appendChild(h('div', { class: 'chips', role: 'group', 'aria-label': '表示する項目' }, SCALES.map(function (sc) {
       return h('button', { type: 'button', class: 'chip', 'aria-pressed': String(!!seriesOn[sc.key]), onClick: function () {
@@ -1093,7 +1105,7 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
         h('p', null, '【食事1回の気分】その食事に記録した気分(食後)の平均です。気分を記録していない食事は、集計に入りません。'),
         h('p', null, '【食べ物ランキング】食べ物を一品ずつに分け、その食べ物を含む食事の気分を平均します。全体の平均より低いものが「ワースト」、高いものが「ベスト」です。「参考」は3回未満です。'),
         h('p', null, '【糖質・炭水化物】入力のある食事が8食以上たまると、20gごとに分けて、気分の平均を比べます。'),
-        h('p', null, '【睡眠・ストレス・運動・飲酒】1日のまとめの入力で日を分け、その日の食事の気分を平均します。')) ));
+        h('p', null, '【睡眠・ストレス・自律神経・運動・飲酒】1日のまとめの入力で日を分け、その日の食事の気分を平均します。')) ));
     if (!demoOn) v.appendChild(h('button', { type: 'button', class: 'ghost', onClick: function () { demoOn = true; render(); window.scrollTo(0, 0); } }, 'デモデータで見てみる'));
   }
 
@@ -1200,5 +1212,3 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
   render();
 })();
 </script>
-
-</body></html>
