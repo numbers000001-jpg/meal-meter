@@ -169,8 +169,6 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .dot.on .face .bg, .face.on .bg { fill: var(--dotc); stroke: var(--dotc); }
 .dot.on .face .e, .dot.on .face .fm, .face.on .e, .face.on .fm { fill: var(--accent-fg); }
 .dot.on .face .f, .face.on .f { stroke: var(--accent-fg); }
-.face .t { fill: var(--dot-off); font-family: var(--font-num); font-size: 11px; font-weight: 600; text-anchor: middle; }
-.dot.on .face .t { fill: var(--accent-fg); }
 .facebox { --dotc: hsl(var(--h, 0) var(--dot-s) var(--dot-l)); display: inline-block; flex: none; }
 .scale { --dotc: hsl(var(--h, 0) var(--dot-s) var(--dot-l)); }
 .dots { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); }
@@ -291,7 +289,7 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
 <script>
 (function () {
   'use strict';
-  var APP_VERSION = '2026-10-26.3';
+  var APP_VERSION = '2026-10-26.4';
   var newVer = null;
   var KEY = 'shokuji-meter.v1';
   var TYPES = ['朝', '昼', '夜', '間食'];
@@ -306,7 +304,7 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
     { key: 'sleep', name: '睡眠の質', lo: '最悪', hi: 'ぐっすり' },
     { key: 'drive', name: '行動力', lo: '動けない', hi: '絶好調' },
     { key: 'stress', name: 'ストレス量', lo: 'ほぼ無し', hi: '限界', inv: true },
-    { key: 'nerve', name: '自律神経', lo: '副交感神経優位', hi: '交感神経優位', neutral: true }
+    { key: 'nerve', name: '自律神経', lo: '副交感神経優位(リラックス)', hi: '交感神経優位(戦闘モード)', neutral: true }
   ];
 
   var state = null;
@@ -544,12 +542,48 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
   }
 
   /* ---------- faces and dot scale ---------- */
-  function numFace(n) {
+  function nerveFace(level) {
     var svg = s('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true', class: 'face' });
     svg.appendChild(s('circle', { cx: 12, cy: 12, r: 10.5, class: 'bg' }));
-    svg.appendChild(s('text', { x: 12, y: 15.8, class: 't' }, String(n)));
+    var t = (level - 1) / 9, k;
+    if (level <= 3) {
+      /* relaxed: closed, smiling eyes */
+      svg.appendChild(s('path', { d: 'M6.2 11.2 Q8.4 13.6 10.6 11.2', class: 'f' }));
+      svg.appendChild(s('path', { d: 'M13.4 11.2 Q15.6 13.6 17.8 11.2', class: 'f' }));
+      var d = level === 1 ? 4.2 : level === 2 ? 3.4 : 2.6;
+      svg.appendChild(s('path', { d: 'M7.8 15.6 Q12 ' + (15.6 + d).toFixed(1) + ' 16.2 15.6', class: 'f' }));
+      return svg;
+    }
+    if (level <= 6) {
+      svg.appendChild(s('circle', { cx: 8.6, cy: 10.8, r: 1.4, class: 'e' }));
+      svg.appendChild(s('circle', { cx: 15.4, cy: 10.8, r: 1.4, class: 'e' }));
+      var m = level === 4 ? 1.4 : level === 5 ? 0 : -0.8;
+      svg.appendChild(s('path', { d: 'M8 16.4 Q12 ' + (16.4 + m * 1.6).toFixed(1) + ' 16 16.4', class: 'f' }));
+      if (level === 6) {
+        svg.appendChild(s('path', { d: 'M6.4 8.4 L10.6 8', class: 'f' }));
+        svg.appendChild(s('path', { d: 'M17.6 8.4 L13.4 8', class: 'f' }));
+      }
+      return svg;
+    }
+    /* 7-10: tense to battle face: angry brows, gritted teeth */
+    var inner = 8.2 + (level - 6) * 0.55;
+    svg.appendChild(s('path', { d: 'M5.8 6.4 L10.8 ' + inner.toFixed(1), class: 'f' }));
+    svg.appendChild(s('path', { d: 'M18.2 6.4 L13.2 ' + inner.toFixed(1), class: 'f' }));
+    svg.appendChild(s('circle', { cx: 8.8, cy: 11.4, r: level >= 9 ? 1.6 : 1.4, class: 'e' }));
+    svg.appendChild(s('circle', { cx: 15.2, cy: 11.4, r: level >= 9 ? 1.6 : 1.4, class: 'e' }));
+    if (level === 7) {
+      svg.appendChild(s('path', { d: 'M8.4 16.6 L15.6 16.6', class: 'f' }));
+    } else if (level === 8) {
+      svg.appendChild(s('path', { d: 'M8 17.4 Q12 15 16 17.4', class: 'f' }));
+    } else {
+      var top = level === 9 ? 14.8 : 14.4, bot = level === 9 ? 18.4 : 19;
+      svg.appendChild(s('rect', { x: 7.2, y: top, width: 9.6, height: bot - top, rx: 1.4, class: 'f' }));
+      svg.appendChild(s('path', { d: 'M7.2 ' + ((top + bot) / 2).toFixed(1) + ' L16.8 ' + ((top + bot) / 2).toFixed(1), class: 'f' }));
+      for (k = 1; k <= 3; k++) svg.appendChild(s('path', { d: 'M' + (7.2 + k * 2.4) + ' ' + top + ' L' + (7.2 + k * 2.4) + ' ' + bot, class: 'f' }));
+    }
     return svg;
   }
+  function hueNerve(v) { return v ? Math.round(200 - (v - 1) / 9 * 180) : 0; }
   function hueFor(v, inv) { if (!v) return 0; var t = (v - 1) / 9; return Math.round(inv ? 130 - 120 * t : 10 + 120 * t); }
   function faceSVG(level) {
     var c = (level - 5.5) / 4.5;
@@ -590,7 +624,7 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
     var btns = [];
     for (var i = 1; i <= 10; i++) (function (i) {
       var b = h('button', { type: 'button', class: 'dot', role: 'radio', 'aria-label': o.label + ' ' + i + ' / 10' });
-      b.appendChild(o.neutral ? numFace(i) : faceSVG(o.inv ? 11 - i : i));
+      b.appendChild(o.neutral ? nerveFace(i) : faceSVG(o.inv ? 11 - i : i));
       b.addEventListener('click', function () { val = (val === i) ? null : i; paint(); if (o.onChange) o.onChange(val); });
       btns.push(b); row.appendChild(b);
     })(i);
@@ -599,7 +633,7 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
         b.classList.toggle('on', val != null && idx + 1 <= val);
         b.setAttribute('aria-checked', String(val === idx + 1));
       });
-      wrap.style.setProperty('--h', o.neutral ? '265' : String(hueFor(val, o.inv)));
+      wrap.style.setProperty('--h', String(o.neutral ? hueNerve(val) : hueFor(val, o.inv)));
     }
     paint();
     return { el: wrap, get: function () { return val; } };
