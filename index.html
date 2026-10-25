@@ -1,3 +1,13 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="食事メーター">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#f2f1ee">
 <title>食事メーター</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap">
@@ -250,6 +260,8 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
 }
 </style>
 
+</head>
+<body>
 <div class="wrap">
   <div class="top">
     <h1>食事メーター</h1>
@@ -279,7 +291,7 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
 <script>
 (function () {
   'use strict';
-  var APP_VERSION = '2026-10-26.2';
+  var APP_VERSION = '2026-10-26.3';
   var newVer = null;
   var KEY = 'shokuji-meter.v1';
   var TYPES = ['朝', '昼', '夜', '間食'];
@@ -1227,3 +1239,5 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
   document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') checkUpdate(); });
 })();
 </script>
+</body>
+</html>
