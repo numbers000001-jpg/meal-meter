@@ -292,7 +292,7 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
 <script>
 (function () {
   'use strict';
-  var APP_VERSION = '2026-10-26.8';
+  var APP_VERSION = '2026-10-26.9';
   var newVer = null;
   var KEY = 'shokuji-meter.v1';
   var TYPES = ['朝', '昼', '夜', '間食'];
@@ -927,11 +927,11 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
     meals.forEach(function (m) { nChecks += m.checks.length; });
     var scs = [];
     meals.forEach(function (m) { m.checks.forEach(function (c) { scs.push(c.score); }); });
-    var am = avg(scs);
+    var am = scs.length ? Math.min.apply(null, scs) : null;
     v.appendChild(h('div', { class: 'stats' },
       h('div', { class: 'stat' }, h('small', null, '食事'), h('span', { class: 'num' }, meals.length + '回')),
       h('div', { class: 'stat' }, h('small', null, '気分の記録'), h('span', { class: 'num' }, nChecks + '件')),
-      h('div', { class: 'stat' }, h('small', null, '食後の気分の平均'), am == null ? h('span', { class: 'num' }, '–') : h('span', { class: 'num statface' }, faceBadge(Math.round(am), 24), fmtNum(am)))));
+      h('div', { class: 'stat' }, h('small', null, '一番悪かった気分'), am == null ? h('span', { class: 'num' }, '–') : h('span', { class: 'num statface' }, faceBadge(am, 24), String(am)))));
     v.appendChild(h('button', { type: 'button', class: 'primary', onClick: function () { openMealSheet(null); } }, '＋ 食事を記録'));
     if (!meals.length) v.appendChild(h('div', { class: 'empty' }, 'この日の食事はまだありません。', h('br'), '食べたら「食事を記録」を押してください。気分が気になったら、食事カードの「食後の気分を記録」から入力できます。'));
     meals.forEach(function (m) { v.appendChild(mealCard(m)); });
@@ -970,7 +970,7 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
     var out = [];
     data.meals.forEach(function (m) {
       if (!inRange(m.date, days) || !m.checks.length) return;
-      out.push({ m: m, score: avg(m.checks.map(function (c) { return c.score; })) });
+      out.push({ m: m, score: Math.min.apply(null, m.checks.map(function (c) { return c.score; })) });
     });
     return out;
   }
@@ -985,13 +985,13 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
   function rankCard(sm) {
     var card = h('section', { class: 'card' },
       h('h2', null, '食べ物ランキング'),
-      h('p', { class: 'hint' }, '食べ物を一品ずつに分け、その食べ物を食べたときの食後の気分(平均)を比べます。'));
+      h('p', { class: 'hint' }, '食べ物を一品ずつに分け、その食べ物を食べた食事の「一番悪かった気分」を平均して比べます。'));
     card.appendChild(h('div', { class: 'seg', role: 'group', 'aria-label': '最低回数' }, [3, 2, 1].map(function (n) {
       return h('button', { type: 'button', 'aria-pressed': String(foodMin === n), onClick: function () { foodMin = n; keepScrollRender(); } }, n + '回以上');
     })));
     if (!sm.length) { card.appendChild(h('p', { class: 'empty' }, 'この期間に、気分を記録した食事がありません。')); return card; }
     var base = avg(sm.map(function (x) { return x.score; }));
-    card.appendChild(h('p', { class: 'hint' }, '全体の平均 ' + fmtNum(base) + '(気分を記録した食事 ' + sm.length + '回)'));
+    card.appendChild(h('p', { class: 'hint' }, '全体の平均 ' + fmtNum(base) + '(一番悪かった気分の平均。気分を記録した食事 ' + sm.length + '回)'));
     var map = {};
     sm.forEach(function (x) {
       var seen = {};
@@ -1031,7 +1031,7 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
   }
 
   function carbCard(sm) {
-    var c = chartCard('糖質・炭水化物の量と気分', '入力した食事を、量(g)ごとに分けて、食後の気分(平均)を比べます。入力は、わかるときだけで大丈夫です。');
+    var c = chartCard('糖質・炭水化物の量と気分', '入力した食事を、量(g)ごとに分けて、食事ごとの「一番悪かった気分」の平均を比べます。入力は、わかるときだけで大丈夫です。');
     var edges = [20, 40, 60, 80, 100];
     var labels = ['20g未満', '20〜40g', '40〜60g', '60〜80g', '80〜100g', '100g以上'];
     [['carbs', '糖質'], ['starch', '炭水化物']].forEach(function (p) {
@@ -1049,7 +1049,7 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
   }
 
   function condCard(data, sm) {
-    var c = chartCard('睡眠・ストレス・自律神経・運動・飲酒・コーヒーとの比較', '条件の違う日(食事)で、食後の気分(平均)を比べます。3食以上ある場合だけ表示します。');
+    var c = chartCard('睡眠・ストレス・自律神経・運動・飲酒・コーヒーとの比較', '条件の違う日(食事)で、食事ごとの「一番悪かった気分」の平均を比べます。3食以上ある場合だけ表示します。');
     function dd(x) { return data.days[x.m.date] || null; }
     var groups = [
       ['睡眠', [['良い日(7以上)', function (x) { var d = dd(x); return d && d.sleep != null && d.sleep >= 7; }], ['悪い日(6以下)', function (x) { var d = dd(x); return d && d.sleep != null && d.sleep <= 6; }]]],
@@ -1069,7 +1069,7 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
   }
 
   function typeCard(sm) {
-    var c = chartCard('朝・昼・夜・間食ごと', '食事の区分ごとの、食後の気分(平均)。');
+    var c = chartCard('朝・昼・夜・間食ごと', '食事の区分ごとの、「一番悪かった気分」の平均。');
     TYPES.forEach(function (t) { c.appendChild(avgRow(t, sm.filter(function (x) { return x.m.type === t; }))); });
     return c;
   }
@@ -1171,8 +1171,8 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
     v.appendChild(h('details', { class: 'card' },
       h('summary', null, '集計のしかた'),
       h('div', { class: 'how' },
-        h('p', null, '【食事1回の気分】その食事に記録した気分(食後)の平均です。気分を記録していない食事は、集計に入りません。'),
-        h('p', null, '【食べ物ランキング】食べ物を一品ずつに分け、その食べ物を含む食事の気分を平均します。全体の平均より低いものが「ワースト」、高いものが「ベスト」です。「参考」は3回未満です。'),
+        h('p', null, '【食事1回の気分】その食事に記録した気分(食後)のうち、一番悪かった値です。平均ではないので、良い記録をたくさん入れても上がりません。気分を記録していない食事は、集計に入りません。'),
+        h('p', null, '【食べ物ランキング】食べ物を一品ずつに分け、その食べ物を含む食事の「一番悪かった気分」を平均します。全体の平均より低いものが「ワースト」、高いものが「ベスト」です。「参考」は3回未満です。'),
         h('p', null, '【糖質・炭水化物】入力のある食事が8食以上たまると、20gごとに分けて、気分の平均を比べます。'),
         h('p', null, '【睡眠・ストレス・自律神経・運動・飲酒・コーヒー】1日のまとめの入力で日を分け、その日の食事の気分を平均します。')) ));
     if (!demoOn) v.appendChild(h('button', { type: 'button', class: 'ghost', onClick: function () { demoOn = true; render(); window.scrollTo(0, 0); } }, 'デモデータで見てみる'));
