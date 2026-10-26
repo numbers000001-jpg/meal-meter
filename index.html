@@ -292,7 +292,7 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
 <script>
 (function () {
   'use strict';
-  var APP_VERSION = '2026-10-26.9';
+  var APP_VERSION = '2026-10-26.10';
   var newVer = null;
   var KEY = 'shokuji-meter.v1';
   var TYPES = ['朝', '昼', '夜', '間食'];
@@ -484,9 +484,9 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
     return c;
   }
   function needsBackup() {
-    if (!state || state.meals.length < 5) return false;
+    if (!state || state.meals.length < 3) return false;
     var lb = state.meta.lastBackup;
-    return !lb || (Date.now() - lb) > 14 * 86400000;
+    return !lb || (Date.now() - lb) > 7 * 86400000;
   }
   function backupAgeText() {
     var lb = state.meta.lastBackup;
@@ -919,7 +919,7 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
 
   function renderToday(v) {
     if (!storageOK) v.appendChild(h('div', { class: 'notice bad', role: 'alert' }, 'この環境ではデータを保存できません。入力した内容は、画面を閉じると消えます。'));
-    if (needsBackup()) v.appendChild(h('div', { class: 'notice' }, 'バックアップは' + backupAgeText() + '。 ', h('button', { type: 'button', class: 'link', onClick: function () { setView('settings'); } }, '設定で全データをコピー')));
+    if (needsBackup()) v.appendChild(h('div', { class: 'notice' }, 'バックアップは' + backupAgeText() + '。 ', h('button', { type: 'button', class: 'link', onClick: function () { setView('settings'); } }, '設定でバックアップを保存')));
     if (newVer) v.appendChild(h('div', { class: 'notice' }, '新しい版があります。 ', h('button', { type: 'button', class: 'link', onClick: function () { location.replace(location.pathname + '?v=' + encodeURIComponent(newVer)); } }, '更新する'), ' (記録は消えません)'));
     v.appendChild(dayNav());
     var meals = state.meals.filter(function (m) { return m.date === day; }).sort(byTime);
@@ -1228,16 +1228,60 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
     var bMsg = h('p', { class: 'msg', role: 'status' });
     var paste = h('textarea', { id: 's-paste', rows: '4', placeholder: 'コピーしたデータをここに貼り付け', style: 'font-family:var(--font-num);font-size:12px' });
     function setMsg(t, bad) { bMsg.textContent = t; bMsg.className = bad ? 'msg bad' : 'msg'; }
-    function lastText() { return '最後にコピー: ' + (state.meta.lastBackup ? fmtLong(todayStrFrom(state.meta.lastBackup)) : 'まだありません'); }
+    function lastText() { return '最後のバックアップ: ' + (state.meta.lastBackup ? fmtLong(todayStrFrom(state.meta.lastBackup)) : 'まだありません'); }
     var lastEl = h('p', { class: 'hint' }, lastText());
+    function hasData() { return state.meals.length || Object.keys(state.days).length || state.favs.length; }
+    function backupJson() { return JSON.stringify({ app: 'shokuji-meter', version: 1, data: state }); }
+    function backupDone(msg) { state.meta.lastBackup = Date.now(); persist(); lastEl.textContent = lastText(); setMsg(msg, false); }
+    function doImport(text) {
+      var parsed;
+      try { parsed = JSON.parse(text); } catch (e) { setMsg('データを読み取れませんでした。バックアップの内容をそのまま使ってください。', true); return; }
+      if (!parsed || parsed.app !== 'shokuji-meter' || !parsed.data) { setMsg('このアプリのバックアップではありません。', true); return; }
+      var c = mergeInto(state, sanitize(parsed.data));
+      persist();
+      paste.value = '';
+      setMsg('取り込みました(食事 ' + c.meals + '件、気分 ' + c.checks + '件、まとめ ' + c.days + '日、よく食べるもの ' + c.favs + '件)。いまのデータは消えません。', false);
+    }
+    var fileIn = h('input', { id: 's-file', type: 'file', accept: '.json,application/json,text/plain', style: 'display:none' });
+    fileIn.addEventListener('change', function () {
+      var fl = fileIn.files && fileIn.files[0];
+      if (!fl) return;
+      var rd = new FileReader();
+      rd.onload = function () { doImport(String(rd.result || '')); fileIn.value = ''; };
+      rd.onerror = function () { setMsg('ファイルを読み込めませんでした。', true); };
+      rd.readAsText(fl);
+    });
     v.appendChild(h('section', { class: 'card' },
       h('h2', null, 'バックアップと復元'),
-      h('p', { class: 'hint' }, 'データはこの端末のブラウザ内だけにあります。Safariのデータ削除、ホーム画面アイコンの削除、機種変更で消えるため、ときどきコピーしてメモアプリなどに貼っておいてください。'),
+      h('p', { class: 'hint' }, 'データはこの端末のブラウザ内だけにあります。iPhoneの設定や容量不足、アイコンの削除、機種変更で消えることがあります。ときどきファイルに保存しておくと、消えても戻せます。'),
       lastEl,
+      h('button', { type: 'button', class: 'primary', id: 's-save', onClick: function () {
+        if (!hasData()) { setMsg('保存するデータがまだありません。', true); return; }
+        var json = backupJson(), name = 'meal-meter-backup-' + todayStr() + '.json';
+        function download() {
+          try {
+            var a = h('a', { href: URL.createObjectURL(new Blob([json], { type: 'application/json' })), download: name });
+            document.body.appendChild(a); a.click(); a.remove();
+            backupDone('ファイル「' + name + '」を保存しました。');
+          } catch (e) { setMsg('保存できませんでした。下の「全データをコピー」を使ってください。', true); }
+        }
+        try {
+          var file = new File([json], name, { type: 'application/json' });
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            navigator.share({ files: [file], title: '食事メーターのバックアップ' }).then(function () {
+              backupDone('保存しました。共有メニューで「ファイルに保存」を選んでいれば、iCloud Driveなどに残ります。');
+            }, function (e) { if (!(e && e.name === 'AbortError')) download(); });
+          } else download();
+        } catch (e) { download(); }
+      } }, 'バックアップをファイルに保存'),
+      h('p', { class: 'hint' }, '共有メニューが開いたら「ファイルに保存」を選んでください(iCloud Driveに入れておくと安心です)。'),
+      h('button', { type: 'button', class: 'ghost', onClick: function () { fileIn.click(); } }, 'ファイルから復元'),
+      fileIn,
+      h('div', { class: 'sub' }, 'テキストでコピー・貼り付けする場合'),
       h('button', { type: 'button', class: 'ghost', onClick: function () {
-        if (!state.meals.length && !Object.keys(state.days).length && !state.favs.length) { setMsg('コピーするデータがまだありません。', true); return; }
-        var json = JSON.stringify({ app: 'shokuji-meter', version: 1, data: state });
-        function ok() { state.meta.lastBackup = Date.now(); persist(); lastEl.textContent = lastText(); setMsg('全データをコピーしました。メモアプリなどに貼り付けて保管してください。', false); }
+        if (!hasData()) { setMsg('コピーするデータがまだありません。', true); return; }
+        var json = backupJson();
+        function ok() { backupDone('全データをコピーしました。メモアプリなどに貼り付けて保管してください。'); }
         function fallback() { paste.value = json; paste.focus(); paste.select(); setMsg('自動コピーできませんでした。下の欄を長押ししてコピーしてください。', true); }
         try { navigator.clipboard.writeText(json).then(ok, fallback); } catch (e) { fallback(); }
       } }, '全データをコピー'),
@@ -1245,13 +1289,7 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
       h('button', { type: 'button', class: 'ghost', onClick: function () {
         var t = paste.value.trim();
         if (!t) { setMsg('貼り付け欄が空です。', true); return; }
-        var parsed;
-        try { parsed = JSON.parse(t); } catch (e) { setMsg('データを読み取れませんでした。コピーした内容をそのまま貼り付けてください。', true); return; }
-        if (!parsed || parsed.app !== 'shokuji-meter' || !parsed.data) { setMsg('このアプリのバックアップではありません。', true); return; }
-        var c = mergeInto(state, sanitize(parsed.data));
-        persist();
-        paste.value = '';
-        setMsg('取り込みました(食事 ' + c.meals + '件、気分 ' + c.checks + '件、まとめ ' + c.days + '日、よく食べるもの ' + c.favs + '件)。いまのデータは消えません。', false);
+        doImport(t);
       } }, '取り込む(いまのデータに追加)'),
       bMsg));
 
@@ -1277,6 +1315,7 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
   document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden' && dirty) persist(); });
   window.addEventListener('pagehide', function () { if (dirty) persist(); });
 
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
   state = load();
   render();
 
