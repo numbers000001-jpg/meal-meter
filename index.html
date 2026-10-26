@@ -292,7 +292,7 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
 <script>
 (function () {
   'use strict';
-  var APP_VERSION = '2026-10-26.5';
+  var APP_VERSION = '2026-10-26.6';
   var newVer = null;
   var KEY = 'shokuji-meter.v1';
   var TYPES = ['朝', '昼', '夜', '間食'];
@@ -1054,7 +1054,7 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
       ['運動', [['運動した日', function (x) { var d = dd(x); return d && d.exercise; }], ['運動しなかった日', function (x) { var d = dd(x); return d && !d.exercise; }]]],
       ['飲酒', [['飲酒した日', function (x) { var d = dd(x); return d && d.alcohol; }], ['飲酒しなかった日', function (x) { var d = dd(x); return d && !d.alcohol; }]]],
       ['自律神経', [['交感神経が優位な日(7以上)', function (x) { var d = dd(x); return d && d.nerve != null && d.nerve >= 7; }], ['副交感神経が優位な日(4以下)', function (x) { var d = dd(x); return d && d.nerve != null && d.nerve <= 4; }]]],
-      ['コーヒー', [['飲まなかった日', function (x) { var d = dd(x); return d && !d.coffee; }], ['1〜2杯の日', function (x) { var d = dd(x); return d && d.coffee >= 1 && d.coffee <= 2; }], ['3杯以上の日', function (x) { var d = dd(x); return d && d.coffee >= 3; }]]],
+      ['コーヒー', [['飲まなかった日', function (x) { var d = dd(x); return d && !d.coffee; }], ['1杯の日', function (x) { var d = dd(x); return d && d.coffee === 1; }], ['2杯の日', function (x) { var d = dd(x); return d && d.coffee === 2; }], ['3杯以上の日', function (x) { var d = dd(x); return d && d.coffee >= 3; }]]],
       ['食後の運動', [['食後に運動した食事', function (x) { return x.m.exercise; }], ['食後に運動していない食事', function (x) { return !x.m.exercise; }]]]
     ];
     groups.forEach(function (g) {
