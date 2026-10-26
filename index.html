@@ -292,7 +292,7 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
 <script>
 (function () {
   'use strict';
-  var APP_VERSION = '2026-10-26.6';
+  var APP_VERSION = '2026-10-26.7';
   var newVer = null;
   var KEY = 'shokuji-meter.v1';
   var TYPES = ['朝', '昼', '夜', '間食'];
@@ -428,7 +428,7 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
   }
   function cleanDay(d) {
     if (!d || typeof d !== 'object') return null;
-    return { mood: int110(d.mood), sleep: int110(d.sleep), drive: int110(d.drive), stress: int110(d.stress), nerve: int110(d.nerve), coffee: (Number.isInteger(d.coffee) && d.coffee >= 0 && d.coffee <= 30) ? d.coffee : 0, exercise: d.exercise === true, alcohol: d.alcohol === true, note: typeof d.note === 'string' ? d.note.slice(0, 1000) : '' };
+    return { mood: int110(d.mood), sleep: int110(d.sleep), drive: int110(d.drive), stress: int110(d.stress), nerve: int110(d.nerve), coffee: (typeof d.coffee === 'number' && isFinite(d.coffee) && d.coffee >= 0 && d.coffee <= 30) ? Math.round(d.coffee * 10) / 10 : 0, exercise: d.exercise === true, alcohol: d.alcohol === true, note: typeof d.note === 'string' ? d.note.slice(0, 1000) : '' };
   }
   function cleanFav(f) {
     if (!f || typeof f !== 'object' || typeof f.name !== 'string' || !normItem(f.name)) return null;
@@ -515,7 +515,7 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
         var types = ['朝', '昼', '夜'];
         if (rnd() < 0.45) types.push('間食');
         var sleep = clamp(6.2 + (rnd() - 0.5) * 4), stress = clamp(4.5 + (rnd() - 0.5) * 4);
-        var ex = rnd() < 0.35, al = rnd() < 0.25, cf = Math.floor(rnd() * 5);
+        var ex = rnd() < 0.35, al = rnd() < 0.25, cf = [0, 0.3, 0.5, 1, 1.5, 2, 3][Math.floor(rnd() * 7)];
         var badMeals = 0;
         types.forEach(function (t) {
           var items = menu[t][Math.floor(rnd() * menu[t].length)];
@@ -895,16 +895,19 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
         return b;
       })),
       (function () {
-        var cnt = h('span', { class: 'cnt', id: 'coffee-n' }, (cur.coffee || 0) + '杯');
+        var cnt = h('span', { class: 'cnt', id: 'coffee-n' }, fmtNum(cur.coffee || 0) + '杯');
         function bump(dx) {
-          var d = ensure(); d.coffee = Math.max(0, Math.min(30, (d.coffee || 0) + dx));
-          cnt.textContent = d.coffee + '杯'; persist(); flash();
+          var d = ensure(), c = d.coffee || 0, nx;
+          if (dx > 0) nx = c < 1 ? c + 0.1 : c + 0.5;
+          else nx = c > 1 ? Math.max(1, c - 0.5) : c - 0.1;
+          d.coffee = Math.max(0, Math.min(30, Math.round(nx * 10) / 10));
+          cnt.textContent = fmtNum(d.coffee) + '杯'; persist(); flash();
         }
         return h('div', { class: 'stepper', role: 'group', 'aria-label': 'コーヒーの杯数' },
           h('span', { class: 'muted' }, 'コーヒー'),
-          h('button', { type: 'button', class: 'nbtn', 'aria-label': 'コーヒーを1杯減らす', onClick: function () { bump(-1); } }, '−'),
+          h('button', { type: 'button', class: 'nbtn', 'aria-label': 'コーヒーを減らす', onClick: function () { bump(-1); } }, '−'),
           cnt,
-          h('button', { type: 'button', class: 'nbtn', 'aria-label': 'コーヒーを1杯増やす', onClick: function () { bump(1); } }, '＋'));
+          h('button', { type: 'button', class: 'nbtn', 'aria-label': 'コーヒーを増やす', onClick: function () { bump(1); } }, '＋'));
       })()));
     var note = h('textarea', { id: 'd-note', rows: '3', maxlength: '1000', placeholder: '例 午後に強い眠気。夕方から回復。' });
     note.value = cur.note || '';
@@ -1054,7 +1057,7 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
       ['運動', [['運動した日', function (x) { var d = dd(x); return d && d.exercise; }], ['運動しなかった日', function (x) { var d = dd(x); return d && !d.exercise; }]]],
       ['飲酒', [['飲酒した日', function (x) { var d = dd(x); return d && d.alcohol; }], ['飲酒しなかった日', function (x) { var d = dd(x); return d && !d.alcohol; }]]],
       ['自律神経', [['交感神経が優位な日(7以上)', function (x) { var d = dd(x); return d && d.nerve != null && d.nerve >= 7; }], ['副交感神経が優位な日(4以下)', function (x) { var d = dd(x); return d && d.nerve != null && d.nerve <= 4; }]]],
-      ['コーヒー', [['飲まなかった日', function (x) { var d = dd(x); return d && !d.coffee; }], ['1杯の日', function (x) { var d = dd(x); return d && d.coffee === 1; }], ['2杯の日', function (x) { var d = dd(x); return d && d.coffee === 2; }], ['3杯以上の日', function (x) { var d = dd(x); return d && d.coffee >= 3; }]]],
+      ['コーヒー', [['飲まなかった日', function (x) { var d = dd(x); return d && !d.coffee; }], ['1杯未満の日', function (x) { var d = dd(x); return d && d.coffee > 0 && d.coffee < 1; }], ['1杯以上2杯未満の日', function (x) { var d = dd(x); return d && d.coffee >= 1 && d.coffee < 2; }], ['2杯以上3杯未満の日', function (x) { var d = dd(x); return d && d.coffee >= 2 && d.coffee < 3; }], ['3杯以上の日', function (x) { var d = dd(x); return d && d.coffee >= 3; }]]],
       ['食後の運動', [['食後に運動した食事', function (x) { return x.m.exercise; }], ['食後に運動していない食事', function (x) { return !x.m.exercise; }]]]
     ];
     groups.forEach(function (g) {
