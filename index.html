@@ -183,7 +183,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .big { font-size: 28px; font-weight: 600; line-height: 1; margin-right: 8px; }
 .biglabel { font-weight: 700; }
 
-textarea, input[type="text"], input[type="date"], input[type="time"], select {
+textarea, input[type="text"], input[type="password"], input[type="date"], input[type="time"], select {
   width: 100%; max-width: 100%; min-width: 0; display: block;
   -webkit-appearance: none; appearance: none;
   background: var(--surface); border: 1px solid var(--rule); border-radius: 10px;
@@ -292,7 +292,7 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
 <script>
 (function () {
   'use strict';
-  var APP_VERSION = '2026-10-26.10';
+  var APP_VERSION = '2026-10-26.11';
   var newVer = null;
   var KEY = 'shokuji-meter.v1';
   var TYPES = ['朝', '昼', '夜', '間食'];
@@ -407,6 +407,77 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
     return b;
   }
 
+  /* ---------- GitHub auto backup (private repo) ---------- */
+  var SYNC_KEY = KEY + '.sync';
+  var SYNC_FILE = 'meal-meter-backup.json';
+  var sync = null;
+  var syncMsg = '';
+  var syncBusy = false, syncPending = false, syncTimer = null;
+  function loadSync() {
+    try { var r = localStorage.getItem(SYNC_KEY); if (!r) return null; var o = JSON.parse(r); return (o && typeof o.repo === 'string' && typeof o.token === 'string') ? o : null; }
+    catch (e) { return null; }
+  }
+  function saveSync() { try { if (sync) localStorage.setItem(SYNC_KEY, JSON.stringify(sync)); else localStorage.removeItem(SYNC_KEY); } catch (e) {} }
+  function b64enc(t) { return btoa(unescape(encodeURIComponent(t))); }
+  function b64dec(t) { return decodeURIComponent(escape(atob(t))); }
+  function backupJson() { return JSON.stringify({ app: 'shokuji-meter', version: 1, data: state }); }
+  function hasAnyData() { return !!(state && (state.meals.length || Object.keys(state.days).length || state.favs.length)); }
+  function httpErr(r) { var e = new Error('http'); e.status = r.status; return e; }
+  function errText(e) {
+    if (e && e.pub) return '公開リポジトリです。記録が誰にでも見えてしまうので、非公開(Private)のリポジトリにしてください。';
+    if (e && e.status === 401) return 'トークンが正しくないか、期限が切れています。';
+    if (e && e.status === 403) return 'このトークンには書き込み権限がありません(Contentsを「Read and write」にしてください)。';
+    if (e && e.status === 404) return 'リポジトリが見つかりません。名前と、トークンの対象リポジトリを確認してください。';
+    return '通信できませんでした。あとで自動でやり直します。';
+  }
+  function gh(token, path, opts) {
+    opts = opts || {};
+    return fetch('https://api.github.com' + path, {
+      method: opts.method || 'GET', cache: 'no-store',
+      headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'Content-Type': 'application/json' },
+      body: opts.body ? JSON.stringify(opts.body) : undefined
+    });
+  }
+  function remoteGet(cfg) {
+    return gh(cfg.token, '/repos/' + cfg.repo + '/contents/' + SYNC_FILE).then(function (r) {
+      if (r.status === 404) return { missing: true };
+      if (!r.ok) throw httpErr(r);
+      return r.json().then(function (j) { return { sha: j.sha, text: b64dec(String(j.content || '').replace(/\s/g, '')) }; });
+    });
+  }
+  function remotePut(cfg, sha) {
+    return gh(cfg.token, '/repos/' + cfg.repo + '/contents/' + SYNC_FILE, { method: 'PUT', body: { message: 'backup ' + new Date().toISOString(), content: b64enc(backupJson()), sha: sha || undefined } })
+      .then(function (r) { if (!r.ok) throw httpErr(r); return r.json(); });
+  }
+  function scheduleSync() { if (!sync) return; clearTimeout(syncTimer); syncTimer = setTimeout(runSync, 4000); }
+  function runSync() {
+    if (!sync || !hasAnyData()) return;
+    if (syncBusy) { syncPending = true; return; }
+    syncBusy = true;
+    var cfg = sync;
+    remoteGet(cfg).then(function (rm) { return remotePut(cfg, rm.sha); })
+      .then(function () { cfg.last = Date.now(); cfg.err = ''; saveSync(); })
+      .catch(function (e) { cfg.err = errText(e); saveSync(); })
+      .then(function () {
+        syncBusy = false;
+        if (syncPending) { syncPending = false; scheduleSync(); }
+        if (view === 'settings' && $('overlay').hidden && !document.activeElement.matches('input, textarea')) keepScrollRender();
+      });
+  }
+  function pullMerge(cfg) {
+    return remoteGet(cfg).then(function (rm) {
+      if (rm.missing) return { found: false };
+      var p;
+      try { p = JSON.parse(rm.text); } catch (e) { return { found: false }; }
+      if (!p || p.app !== 'shokuji-meter' || !p.data) return { found: false };
+      var c = mergeInto(state, sanitize(p.data));
+      persistQuiet();
+      return { found: true, sha: rm.sha, c: c };
+    });
+  }
+  function persistQuiet() { dirty = false; try { var j = JSON.stringify(state); localStorage.setItem(KEY, j); storageOK = localStorage.getItem(KEY) === j; } catch (e) { storageOK = false; } paintStatus(); }
+  sync = loadSync();
+
   /* ---------- data ---------- */
   function emptyState() { return { meals: [], days: {}, favs: [], meta: { lastBackup: null } }; }
   function int110(x) { return (typeof x === 'number' && Number.isInteger(x) && x >= 1 && x <= 10) ? x : null; }
@@ -457,6 +528,7 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
     try { var json = JSON.stringify(state); localStorage.setItem(KEY, json); storageOK = localStorage.getItem(KEY) === json; }
     catch (e) { storageOK = false; }
     paintStatus();
+    scheduleSync();
     return storageOK;
   }
   function mergeInto(target, inc) {
@@ -919,7 +991,8 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
 
   function renderToday(v) {
     if (!storageOK) v.appendChild(h('div', { class: 'notice bad', role: 'alert' }, 'この環境ではデータを保存できません。入力した内容は、画面を閉じると消えます。'));
-    if (needsBackup()) v.appendChild(h('div', { class: 'notice' }, 'バックアップは' + backupAgeText() + '。 ', h('button', { type: 'button', class: 'link', onClick: function () { setView('settings'); } }, '設定でバックアップを保存')));
+    if (sync && sync.err) v.appendChild(h('div', { class: 'notice bad' }, 'GitHubへの自動バックアップに失敗しています。 ', h('button', { type: 'button', class: 'link', onClick: function () { setView('settings'); } }, '設定で確認')));
+    if (needsBackup() && !(sync && sync.last && Date.now() - sync.last < 7 * 86400000)) v.appendChild(h('div', { class: 'notice' }, 'バックアップは' + backupAgeText() + '。 ', h('button', { type: 'button', class: 'link', onClick: function () { setView('settings'); } }, '設定でバックアップを保存')));
     if (newVer) v.appendChild(h('div', { class: 'notice' }, '新しい版があります。 ', h('button', { type: 'button', class: 'link', onClick: function () { location.replace(location.pathname + '?v=' + encodeURIComponent(newVer)); } }, '更新する'), ' (記録は消えません)'));
     v.appendChild(dayNav());
     var meals = state.meals.filter(function (m) { return m.date === day; }).sort(byTime);
@@ -1178,6 +1251,60 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
     if (!demoOn) v.appendChild(h('button', { type: 'button', class: 'ghost', onClick: function () { demoOn = true; render(); window.scrollTo(0, 0); } }, 'デモデータで見てみる'));
   }
 
+  function syncCard() {
+    var msg = h('p', { class: 'msg', role: 'status' });
+    function say(t, bad) { msg.textContent = t; msg.className = bad ? 'msg bad' : 'msg'; }
+    if (syncMsg) { say(syncMsg.t, syncMsg.bad); }
+    var card = h('section', { class: 'card', 'aria-label': 'GitHub自動バックアップ' }, h('h2', null, 'GitHubに自動バックアップ'));
+    if (sync) {
+      card.appendChild(h('p', { class: 'hint' }, '記録を保存するたびに、あなた専用の非公開リポジトリ ' + sync.repo + ' へ自動でバックアップします。'));
+      card.appendChild(h('p', { class: sync.err ? 'msg bad' : 'hint', id: 'g-status' }, sync.err ? sync.err : (sync.last ? '最後の自動バックアップ: ' + fmtLong(todayStrFrom(sync.last)) + ' ' + new Date(sync.last).toTimeString().slice(0, 5) : 'まだ送信していません(保存すると送信されます)。')));
+      card.appendChild(h('button', { type: 'button', class: 'ghost', id: 'g-now', onClick: function () { say('送信中…', false); clearTimeout(syncTimer); runSyncNow(); } }, '今すぐバックアップ'));
+      card.appendChild(h('button', { type: 'button', class: 'ghost', id: 'g-pull', onClick: function () {
+        say('取り込み中…', false);
+        pullMerge(sync).then(function (r) {
+          syncMsg = r.found ? { t: 'GitHubの記録を取り込みました(食事 ' + r.c.meals + '件、気分 ' + r.c.checks + '件、まとめ ' + r.c.days + '日)。いまのデータは消えません。', bad: false } : { t: 'GitHubにバックアップがまだありません。', bad: true };
+          render();
+        }).catch(function (e) { say(errText(e), true); });
+      } }, 'GitHubから復元(いまのデータに追加)'));
+      card.appendChild(confirmButton('連携をやめる', '本当にやめる?', function () { sync = null; saveSync(); syncMsg = { t: '連携をやめました。GitHub側のファイルは残ります。', bad: false }; render(); }));
+    } else {
+      card.appendChild(h('p', { class: 'hint' }, '端末のデータが消えても戻せるよう、記録を自動であなたのGitHub(非公開リポジトリ)にバックアップします。記録がGitHubのサーバーに置かれる点にご注意ください。バックアップのファイルにトークンは入りません。'));
+      var repoIn = h('input', { id: 'g-repo', type: 'text', placeholder: '例 numbers000001-jpg/meal-meter-data', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false' });
+      var tokIn = h('input', { id: 'g-token', type: 'password', placeholder: 'github_pat_...', autocomplete: 'off' });
+      card.appendChild(h('div', { class: 'field' }, h('label', { for: 'g-repo' }, 'リポジトリ(ユーザー名/名前)'), repoIn));
+      card.appendChild(h('div', { class: 'field' }, h('label', { for: 'g-token' }, 'トークン'), tokIn));
+      card.appendChild(h('button', { type: 'button', class: 'primary', id: 'g-connect', onClick: function () {
+        var repo = repoIn.value.trim().replace(/^https?:\/\/github\.com\//, '').replace(/\.git$/, '').replace(/\/$/, ''), token = tokIn.value.trim();
+        if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) { say('リポジトリは「ユーザー名/名前」の形で入れてください。', true); return; }
+        if (!token) { say('トークンを入れてください。', true); return; }
+        say('接続中…', false);
+        var cfg = { repo: repo, token: token, last: 0, err: '' };
+        var note = '';
+        gh(token, '/repos/' + repo).then(function (r) { if (!r.ok) throw httpErr(r); return r.json(); })
+          .then(function (j) { if (!j.private) throw { pub: true }; return pullMerge(cfg); })
+          .then(function (r) {
+            if (r.found) note = 'GitHubの記録を取り込みました(食事 ' + r.c.meals + '件、気分 ' + r.c.checks + '件、まとめ ' + r.c.days + '日)。';
+            if (!hasAnyData()) return null;
+            return remotePut(cfg, r.sha);
+          })
+          .then(function () { cfg.last = hasAnyData() ? Date.now() : 0; sync = cfg; saveSync(); syncMsg = { t: 'つながりました。' + note + 'これからは保存するたびに自動でバックアップされます。', bad: false }; render(); })
+          .catch(function (e) { say(errText(e), true); });
+      } }, '接続する'));
+      card.appendChild(h('details', null,
+        h('summary', { class: 'link' }, '設定のしかた(最初の1回だけ)'),
+        h('div', { class: 'how' },
+          h('p', null, '1. GitHubで、非公開(Private)のリポジトリを新しく作ります。名前は「meal-meter-data」など。READMEの追加はどちらでも大丈夫です。'),
+          h('p', null, '2. GitHubの Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token。'),
+          h('p', null, '3. Repository access は「Only select repositories」で、作ったリポジトリだけを選びます。Permissions の Contents を「Read and write」にします。期限は長め(1年など)にします。'),
+          h('p', null, '4. 作ったトークン(github_pat_で始まる文字)をコピーして、上の欄に貼ります。リポジトリ名も入れて「接続する」を押します。'),
+          h('p', null, '5. トークンは、メモアプリなどにも保管しておいてください。端末のデータが消えると、このアプリに入れたトークンも消えるので、入れ直しが必要です。'))));
+    }
+    card.appendChild(msg);
+    return card;
+  }
+  function runSyncNow() { syncPending = false; if (!sync) return; if (syncBusy) { syncPending = true; return; } runSync(); }
+
   /* ---------- settings ---------- */
   function renderSettings(v) {
     var nChecks = 0;
@@ -1292,6 +1419,8 @@ details.card > summary { min-height: 44px; display: flex; align-items: center; c
         doImport(t);
       } }, '取り込む(いまのデータに追加)'),
       bMsg));
+
+    v.appendChild(syncCard());
 
     v.appendChild(h('section', { class: 'card' },
       h('h2', null, 'このアプリについて'),
